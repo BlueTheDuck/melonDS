@@ -1097,11 +1097,43 @@ void ScreenPanelGL::onScreenLayoutChanged()
 static int signalFd[2];
 QSocketNotifier *signalSn;
 
-static void signalHandler(int)
+static void signalHandler(int sig)
 {
-    char a = 1;
-    write(signalFd[0], &a, sizeof(a));
+    write(signalFd[0], &sig, sizeof(sig));
 }
+
+void MainWindow::onUnixSignal()
+{
+    int buf = 0;
+    QString filePath;
+
+    signalSn->setEnabled(false);
+
+    read(signalFd[1], &buf, sizeof(buf));
+    switch (buf)
+    {
+    case SIGUSR1:
+        printf("Received USR1, reloading ROM\n");
+        filePath = this->recentFileList.first();
+        if (QFile::exists(filePath))
+        {
+            emuThread->emuPause();
+            this->loadROM(filePath);
+        }
+        break;
+
+    case SIGINT:
+        printf("Received INT, quitting\n");
+        emit MainWindow::onQuit();
+        break;
+
+    default:
+        break;
+    }
+
+    signalSn->setEnabled(true);
+}
+
 #endif
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent)
@@ -1113,7 +1145,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent)
     }
 
     signalSn = new QSocketNotifier(signalFd[1], QSocketNotifier::Read, this);
-    connect(signalSn, SIGNAL(activated(int)), this, SLOT(onQuit()));
+    connect(signalSn, SIGNAL(activated(int)), this, SLOT(onUnixSignal()));
 
     struct sigaction sa;
 
@@ -1122,6 +1154,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent)
     sa.sa_flags = 0;
     sa.sa_flags |= SA_RESTART;
     sigaction(SIGINT, &sa, 0);
+    sigaction(SIGUSR1, &sa, 0);
 #endif
 
     setWindowTitle("melonDS " MELONDS_VERSION);

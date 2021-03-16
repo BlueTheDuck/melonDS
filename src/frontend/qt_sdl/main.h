@@ -261,6 +261,10 @@ private slots:
     
     void onFullscreenToggled();
 
+#ifndef _WIN32
+    void onUnixSignal();
+#endif
+
 private:
     QList<QString> recentFileList;
     QMenu *recentMenu;
